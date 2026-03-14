@@ -6,6 +6,7 @@ from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
+from langchain.memory import ConversationBufferMemory
 from dotenv import load_dotenv
 from src.prompt import *
 import os
@@ -13,6 +14,14 @@ import os
 
 app = Flask(__name__)
 
+from langchain_groq import ChatGroq
+import os
+
+llm = ChatGroq(
+    model="llama-3.3-70b-versatile",
+    groq_api_key=os.getenv("GROQ_API_KEY"),
+    temperature=0
+)
 
 load_dotenv()
 
@@ -31,10 +40,19 @@ docsearch = PineconeVectorStore.from_existing_index(
     embedding=embeddings
 )
 
+retriever = docsearch.as_retriever(search_kwargs={"k":5})
 
+from langchain.memory import ConversationBufferWindowMemory
+
+memory = ConversationBufferWindowMemory(
+    k=5,
+    memory_key="chat_history",
+    return_messages=True
+)
 
 
 retriever = docsearch.as_retriever(search_type="similarity", search_kwargs={"k":3})
+retriever = docsearch.as_retriever(search_kwargs={"k":5})
 
 chatModel = ChatGroq(model_name="llama-3.3-70b-versatile")
 prompt = ChatPromptTemplate.from_messages(
@@ -45,7 +63,15 @@ prompt = ChatPromptTemplate.from_messages(
 )
 
 question_answer_chain = create_stuff_documents_chain(chatModel, prompt)
-rag_chain = create_retrieval_chain(retriever, question_answer_chain)
+from langchain.chains import ConversationalRetrievalChain
+
+rag_chain = ConversationalRetrievalChain.from_llm(
+    llm=llm,
+    retriever=retriever,
+    memory=memory,
+    return_source_documents=True
+)
+#rag_chain = create_retrieval_chain(retriever, question_answer_chain)
 
 
 
@@ -60,7 +86,7 @@ def chat():
     msg = request.form["msg"]
     input = msg
     print(input)
-    response = rag_chain.invoke({"input": msg})
+    response = rag_chain.invoke({"question": msg})
     print("Response : ", response["answer"])
     return str(response["answer"])
 
