@@ -1,7 +1,6 @@
 from flask import Flask, render_template, jsonify, request
 from src.helper import download_hugging_face_embeddings
 from langchain_pinecone import PineconeVectorStore
-from langchain_openai import ChatOpenAI
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
@@ -40,19 +39,26 @@ docsearch = PineconeVectorStore.from_existing_index(
     embedding=embeddings
 )
 
+
 retriever = docsearch.as_retriever(search_kwargs={"k":5})
 
 from langchain.memory import ConversationBufferWindowMemory
+from langchain.chains import ConversationalRetrievalChain
 
 memory = ConversationBufferWindowMemory(
     k=5,
     memory_key="chat_history",
-    return_messages=True
+    return_messages=True,
+    output_key="answer"
 )
 
+rag_chain = ConversationalRetrievalChain.from_llm(
+    llm=llm,
+    retriever=retriever,
+    memory=memory,
+    return_source_documents=True
+)
 
-retriever = docsearch.as_retriever(search_type="similarity", search_kwargs={"k":3})
-retriever = docsearch.as_retriever(search_kwargs={"k":5})
 
 chatModel = ChatGroq(model_name="llama-3.3-70b-versatile")
 prompt = ChatPromptTemplate.from_messages(
